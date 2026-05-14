@@ -30,4 +30,10 @@ export class ErrorDictionary {
     descripcion: 'Servicio de base de datos DynamoDB no disponible',
     statusCode: HttpStatus.SERVICE_UNAVAILABLE,
   };
+
+  static readonly KINESIS_UNAVAILABLE: InputError = {
+    code:        'APP-005',
+    descripcion: 'Servicio de stream Kinesis no disponible',
+    statusCode:  HttpStatus.SERVICE_UNAVAILABLE,
+  };
 }

@@ -146,3 +146,9 @@ cdk.out/
 
 # Project specifications
 project-spec.md
+
+# Openspec
+openspec/
+.github/prompts/
+.github/skills/
+docs/

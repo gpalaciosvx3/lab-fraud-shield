@@ -4,8 +4,8 @@ import { Construct } from 'constructs';
 import { ResourceConstants } from '../../../common/constants/resource.constants';
 
 interface HttpApiProps {
-  pingFn: lambda.IFunction;
-  stage: string;
+  txIngesterFn:  lambda.IFunction;
+  stage:         string;
 }
 
 export class HttpApiConstruct extends Construct {
@@ -16,13 +16,13 @@ export class HttpApiConstruct extends Construct {
 
     const api = new apigateway.RestApi(this, 'Api', {
       restApiName: ResourceConstants.API_NAME,
-      description: 'API REST del proyecto',
+      description: 'API REST de Fraud Shield para ingestión de transacciones',
       deployOptions: {
         stageName: props.stage,
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,
-        allowMethods: ['GET', 'OPTIONS'],
+        allowMethods: ['POST', 'OPTIONS'],
         allowHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
       },
     });
@@ -40,11 +40,12 @@ export class HttpApiConstruct extends Construct {
 
     usagePlan.addApiKey(apiKey);
 
-    const pingIntegration = new apigateway.LambdaIntegration(props.pingFn);
+    const txIngesterIntegration = new apigateway.LambdaIntegration(props.txIngesterFn);
 
-    const v1   = api.root.addResource('v1');
-    const ping = v1.addResource('ping');
-    ping.addMethod('GET', pingIntegration, { apiKeyRequired: true });
+    const v1           = api.root.addResource('v1');
+    const transactions = v1.addResource('transactions');
+
+    transactions.addMethod('POST', txIngesterIntegration, { apiKeyRequired: true });
 
     this.url = api.url;
   }
