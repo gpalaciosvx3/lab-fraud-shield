@@ -1,7 +1,7 @@
 {
-  "name": "arq-serverless-cdk",
+  "name": "fraud-shield",
   "version": "1.0.0",
-  "description": "Arquitectura Serverless con CDK",
+  "description": "Detector de fraude en tiempo real",
   "scripts": {
     "build": "tsc --noEmit",
     "test": "jest --coverage",

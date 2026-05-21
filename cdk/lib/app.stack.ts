@@ -22,6 +22,16 @@ export class AppStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props);
 
+    const riskAlertEmailClientA = new cdk.CfnParameter(this, 'RiskAlertEmailClientA', {
+      type: 'String',
+      description: 'Email del equipo de riesgo para client A',
+    });
+
+    const riskAlertEmailClientB = new cdk.CfnParameter(this, 'RiskAlertEmailClientB', {
+      type: 'String',
+      description: 'Email del equipo de riesgo para client B',
+    });
+
     new WorkerRoleConstruct(this, 'WorkerRole');
 
     this.kinesisStream = new KinesisStreamConstruct(this, 'KinesisStream');
@@ -55,7 +65,10 @@ export class AppStack extends cdk.Stack {
     const profileAggregatorTable = new ProfileAggregatorTableConstruct(this, 'ProfileAggregatorTable');
     const fraudRulesTable = new FraudRulesTableConstruct(this, 'FraudRulesTable');
     const fraudDecisionsTable = new FraudDecisionsTableConstruct(this, 'FraudDecisionsTable');
-    const fraudAlertsTopic = new FraudAlertsTopicConstruct(this, 'FraudAlertsTopic');
+    const fraudAlertsTopic = new FraudAlertsTopicConstruct(this, 'FraudAlertsTopic', {
+      riskAlertEmailClientA: riskAlertEmailClientA.valueAsString,
+      riskAlertEmailClientB: riskAlertEmailClientB.valueAsString,
+    });
 
     new ProfileAggregatorFnConstruct(this, 'ProfileAggregatorFn', {
       stream: this.kinesisStream.stream,

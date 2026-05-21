@@ -124,9 +124,19 @@ npm run destroy           # destroy en AWS
 # API Gateway
 awslocal apigateway get-rest-apis
 awslocal apigateway get-stages --rest-api-id <api-id>
+awslocal apigateway get-api-keys --include-values --query 'items[*].[id,name,value]' --output table
 
 # Lambda
 awslocal lambda list-functions --query 'Functions[*].FunctionName'
+
+# DynamoDB
+awslocal dynamodb list-tables
+awslocal dynamodb scan --table-name UE1FRAUDSHIELDDDB001 --limit 20
+awslocal dynamodb scan --table-name UE1FRAUDSHIELDDDB002 --limit 20
+awslocal dynamodb scan --table-name UE1FRAUDSHIELDDDB003 --limit 20
+
+# API Key de API Gateway (filtrado por nombre)
+awslocal apigateway get-api-keys --include-values --query "items[?name=='UE1FRAUDSHIELDGTW001-KEY'].[id,name,value]" --output table
 ```
 
 ---
