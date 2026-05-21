@@ -1,6 +1,5 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import { StageConfig } from '../common/types/stage-config.types';
 import { WorkerRoleConstruct } from './constructs/iam/worker-role.construct';
 import { TxIngesterFnConstruct } from './constructs/lambda/transaction-ingester/transaction-ingester-fn.construct';
 import { KinesisStreamConstruct } from './constructs/kinesis/stream.construct';
@@ -10,15 +9,13 @@ import { AuditTrailBucketPolicyConstruct } from './constructs/s3/audit-trail-buc
 import { AuditDeliveryRoleConstruct } from './constructs/iam/audit-delivery-role.construct';
 import { AuditReaderRoleConstruct } from './constructs/iam/audit-reader-role.construct';
 import { AuditTrailDeliveryConstruct } from './constructs/firehose/audit-trail-delivery.construct';
-
-interface AppStackProps extends cdk.StackProps {
-  config: StageConfig;
-}
+import { ProfileAggregatorTableConstruct } from './constructs/dynamo/profile-aggregator-table.construct';
+import { ProfileAggregatorFnConstruct } from './constructs/lambda/profile-aggregator/profile-aggregator-fn.construct';
 
 export class AppStack extends cdk.Stack {
   readonly kinesisStream: KinesisStreamConstruct;
 
-  constructor(scope: Construct, id: string, props: AppStackProps) {
+  constructor(scope: Construct, id: string, props: cdk.StackProps) {
     super(scope, id, props);
 
     new WorkerRoleConstruct(this, 'WorkerRole');
@@ -51,9 +48,15 @@ export class AppStack extends cdk.Stack {
       stream: this.kinesisStream.stream,
     });
 
+    const profileAggregatorTable = new ProfileAggregatorTableConstruct(this, 'ProfileAggregatorTable');
+
+    new ProfileAggregatorFnConstruct(this, 'ProfileAggregatorFn', {
+      stream: this.kinesisStream.stream,
+      profileTable: profileAggregatorTable.table,
+    });
+
     const api = new HttpApiConstruct(this, 'HttpApi', {
       txIngesterFn: txIngesterFn.fn,
-      stage:        props.config.stage,
     });
 
     new cdk.CfnOutput(this, 'ApiUrl',        { value: api.url,                                  description: 'API Gateway URL' });
@@ -61,5 +64,6 @@ export class AppStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'StreamName',    { value: this.kinesisStream.stream.streamName,     description: 'Kinesis Stream Name' });
     new cdk.CfnOutput(this, 'AuditBucket',   { value: auditTrailBucket.bucket.bucketName,       description: 'S3 Bucket Name for immutable audit trail' });
     new cdk.CfnOutput(this, 'AuditFirehose', { value: auditTrailDelivery.deliveryStream.ref,    description: 'Firehose Delivery Stream Name for audit trail' });
+    new cdk.CfnOutput(this, 'ProfileTableName', { value: profileAggregatorTable.table.tableName, description: 'DynamoDB table name for client profile aggregation' });
   }
 }

@@ -5,14 +5,15 @@ export type ApiGwExtracted = {
   queryStringParameters: Record<string, string>;
 };
 
-export type SqsMessage = {
+export type KinesisMessage = {
   body: unknown;
-  messageId: string;
+  partitionKey: string;
+  sequenceNumber: string;
 };
 
-export type SqsExtracted = {
-  source: 'sqs';
-  records: SqsMessage[];
+export type KinesisExtracted = {
+  source: 'kinesis';
+  records: KinesisMessage[];
 };
 
-export type LambdaExtracted = ApiGwExtracted | SqsExtracted;
+export type LambdaExtracted = ApiGwExtracted | KinesisExtracted;

@@ -1,11 +1,11 @@
 import * as apigateway from 'aws-cdk-lib/aws-apigateway';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import { Construct } from 'constructs';
+import { InfraConstants } from '../../../common/constants/infra.constants';
 import { ResourceConstants } from '../../../common/constants/resource.constants';
 
 interface HttpApiProps {
   txIngesterFn:  lambda.IFunction;
-  stage:         string;
 }
 
 export class HttpApiConstruct extends Construct {
@@ -18,7 +18,7 @@ export class HttpApiConstruct extends Construct {
       restApiName: ResourceConstants.API_NAME,
       description: 'API REST de Fraud Shield para ingestión de transacciones',
       deployOptions: {
-        stageName: props.stage,
+        stageName: InfraConstants.API_GATEWAY_STAGE_NAME,
       },
       defaultCorsPreflightOptions: {
         allowOrigins: apigateway.Cors.ALL_ORIGINS,

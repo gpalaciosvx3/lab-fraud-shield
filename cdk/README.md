@@ -1,6 +1,6 @@
-# {{project-name}} — CDK
+# fraud-shield — CDK
 
-Infraestructura AWS del proyecto `{{project-name}}`, definida con AWS CDK (TypeScript).
+Infraestructura AWS del proyecto fraud-shield, definida con AWS CDK (TypeScript) en modo single-account.
 
 ---
 
@@ -12,7 +12,7 @@ Infraestructura AWS del proyecto `{{project-name}}`, definida con AWS CDK (TypeS
 - [Desarrollo en LocalStack](#desarrollo-en-localstack)
 - [Despliegue en AWS](#despliegue-en-aws)
 - [Comandos de referencia](#comandos-de-referencia)
-- [Stages y configuración](#stages-y-configuración)
+- [Configuración de consumo Kinesis](#configuracion-de-consumo-kinesis)
 - [Recursos desplegados](#recursos-desplegados)
 
 ---
@@ -22,18 +22,18 @@ Infraestructura AWS del proyecto `{{project-name}}`, definida con AWS CDK (TypeS
 ```
 cdk/
   bin/
-    app.ts              # Entry point — resuelve stage → config → stack
+    app.ts              # Entry point — single account/region
   lib/
     app.stack.ts        # Stack principal
     constructs/
       api-gateway/      # REST API v1, API Key, Usage Plan
       cloudwatch/       # Log groups por Lambda
-      iam/              # Rol de ejecución compartido
+      dynamo/           # Tablas DynamoDB
+      iam/              # Roles de ejecución y permisos mínimos
+      kinesis/          # Stream Kinesis
       lambda/           # Una construct por función Lambda
   common/
     constants/          # NamingConstants, ResourceConstants, InfraConstants
-    stages/             # local.stage.ts, dev.stage.ts
-    types/              # StageConfig
   docker-compose.yml    # LocalStack Pro para desarrollo local
 ```
 
@@ -72,10 +72,10 @@ docker compose up -d
 cdklocal bootstrap
 
 # Deploy
-CDK_STAGE=local cdklocal deploy --require-approval never
+cdklocal deploy --require-approval never
 
 # Preview de cambios
-CDK_STAGE=local cdklocal diff
+cdklocal diff
 
 # Destruir
 cdklocal destroy --force
@@ -96,20 +96,22 @@ npm run destroy:local    # destruir stack
 
 ```bash
 # Bootstrap (una vez por cuenta/región)
-CDK_STAGE=dev cdk bootstrap aws://<ACCOUNT_ID>/us-east-1
+cdk bootstrap aws://<ACCOUNT_ID>/<REGION>
 
 # Preview
-CDK_STAGE=dev cdk diff
+cdk diff
 
 # Deploy
-CDK_STAGE=dev cdk deploy --require-approval never
+cdk deploy --require-approval never
 ```
 
 ### Scripts disponibles
 
 ```bash
-npm run deploy:dev       # deploy a AWS DEV
-npm run diff:dev         # diff en AWS DEV
+npm run bootstrap         # bootstrap en AWS
+npm run deploy            # deploy en AWS
+npm run diff              # diff en AWS
+npm run destroy           # destroy en AWS
 ```
 
 ---
@@ -129,22 +131,15 @@ awslocal lambda list-functions --query 'Functions[*].FunctionName'
 
 ---
 
-## Stages y configuración
+## Configuracion de consumo Kinesis
 
-| Stage | Branch | Cuenta |
-|---|---|---|
-| `local` | `local` | `000000000000` (LocalStack) |
-| `dev` | `develop` | `CDK_DEFAULT_ACCOUNT` |
-| `qa` | `release` | pendiente |
-| `prd` | `master` | pendiente |
+La Lambda profile-aggregator tiene event source mapping explicito en CDK:
 
-El stage se controla con la variable de entorno `CDK_STAGE`:
+- `startingPosition`: `TRIM_HORIZON`
+- `bisectBatchOnError`: `true`
+- `reportBatchItemFailures`: `true`
 
-```bash
-CDK_STAGE=dev cdk deploy ...
-```
-
-Para agregar un nuevo stage: crear `cdk/common/stages/qa.stage.ts` y extender el `switch` en `bin/app.ts`.
+El resto de parametros de lote/concurrencia/reintentos usa defaults de AWS Lambda para Kinesis y se ajusta solo cuando haya necesidad operacional.
 
 ---
 
@@ -152,6 +147,9 @@ Para agregar un nuevo stage: crear `cdk/common/stages/qa.stage.ts` y extender el
 
 | Recurso | Nombre lógico | Nombre físico |
 |---|---|---|
-| Lambda Ping | `PingFn` | `UE1{{PROJECT}}LMB001` |
-| API Gateway REST | `HttpApi` | `UE1{{PROJECT}}GTW001` |
-| IAM Role | `WorkerRole` | `UE1{{PROJECT}}ROL001` |
+| Lambda Transaction Ingester | `TxIngesterFn` | `UE1FRAUDSHIELDLMB001` |
+| Lambda Profile Aggregator | `ProfileAggregatorFn` | `UE1FRAUDSHIELDLMB002` |
+| API Gateway REST | `HttpApi` | `UE1FRAUDSHIELDGTW001` |
+| Kinesis Stream | `KinesisStream` | `UE1FRAUDSHIELDKDS001` |
+| DynamoDB Profiles | `ProfileAggregatorTable` | `UE1FRAUDSHIELDDDB001` |
+| IAM Role | `WorkerRole` | `UE1FRAUDSHIELDROL001` |

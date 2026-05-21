@@ -21,6 +21,26 @@ export class DynamoClient {
     );
   }
 
+  async putIfNotExists(
+    table: string,
+    keyField: string,
+    item: object,
+  ): Promise<boolean> {
+    return awsError(
+      async () => {
+        await dynamoDbClient.send(new PutCommand({
+          TableName: table,
+          Item: item as Record<string, NativeAttributeValue>,
+          ConditionExpression: 'attribute_not_exists(#pk)',
+          ExpressionAttributeNames: { '#pk': keyField },
+        }));
+        return true;
+      },
+      ErrorDictionary.DYNAMO_UNAVAILABLE,
+      [{ code: AwsErrorCodes.DYNAMO_CONDITIONAL_CHECK_FAILED, result: false }],
+    );
+  }
+
   async updateFields(
     table: string,
     key: Record<string, unknown>,

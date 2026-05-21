@@ -36,4 +36,10 @@ export class ErrorDictionary {
     descripcion: 'Servicio de stream Kinesis no disponible',
     statusCode:  HttpStatus.SERVICE_UNAVAILABLE,
   };
+
+  static readonly PROFILE_WRITE_CONFLICT: InputError = {
+    code:        'APP-006',
+    descripcion: 'No se pudo persistir el perfil por concurrencia',
+    statusCode:  HttpStatus.CONFLICT,
+  };
 }

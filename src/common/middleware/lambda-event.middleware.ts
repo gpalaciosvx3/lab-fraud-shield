@@ -1,4 +1,4 @@
-import { APIGatewayProxyEvent, APIGatewayProxyEventV2, SQSEvent } from 'aws-lambda';
+import { APIGatewayProxyEvent, APIGatewayProxyEventV2, KinesisStreamEvent } from 'aws-lambda';
 import { LambdaExtracted } from './types/lambda-event.types';
 
 export class LambdaEventMiddleware {
@@ -23,13 +23,14 @@ export class LambdaEventMiddleware {
       };
     }
 
-    if (LambdaEventMiddleware.isSqs(event)) {
-      const e = event as SQSEvent;
+    if (LambdaEventMiddleware.isKinesis(event)) {
+      const e = event as KinesisStreamEvent;
       return {
-        source: 'sqs',
+        source: 'kinesis',
         records: e.Records.map(r => ({
-          body: JSON.parse(r.body),
-          messageId: r.messageId,
+          body: JSON.parse(Buffer.from(r.kinesis.data, 'base64').toString('utf-8')),
+          partitionKey: r.kinesis.partitionKey,
+          sequenceNumber: r.kinesis.sequenceNumber,
         })),
       };
     }
@@ -59,7 +60,7 @@ export class LambdaEventMiddleware {
     );
   }
 
-  private static isSqs(event: unknown): boolean {
+  private static isKinesis(event: unknown): boolean {
     const e = event as Record<string, unknown>;
     return (
       typeof e === 'object' &&
@@ -67,7 +68,7 @@ export class LambdaEventMiddleware {
       Array.isArray(e['Records']) &&
       (e['Records'] as unknown[]).length > 0 &&
       typeof (e['Records'] as Record<string, unknown>[])[0]['eventSource'] === 'string' &&
-      (e['Records'] as Record<string, unknown>[])[0]['eventSource'] === 'aws:sqs'
+      (e['Records'] as Record<string, unknown>[])[0]['eventSource'] === 'aws:kinesis'
     );
   }
 }
