@@ -11,6 +11,10 @@ import { AuditReaderRoleConstruct } from './constructs/iam/audit-reader-role.con
 import { AuditTrailDeliveryConstruct } from './constructs/firehose/audit-trail-delivery.construct';
 import { ProfileAggregatorTableConstruct } from './constructs/dynamo/profile-aggregator-table.construct';
 import { ProfileAggregatorFnConstruct } from './constructs/lambda/profile-aggregator/profile-aggregator-fn.construct';
+import { FraudRulesTableConstruct } from './constructs/dynamo/fraud-rules-table.construct';
+import { FraudDecisionsTableConstruct } from './constructs/dynamo/fraud-decisions-table.construct';
+import { FraudAlertsTopicConstruct } from './constructs/sns/fraud-alerts-topic.construct';
+import { FraudEvaluatorFnConstruct } from './constructs/lambda/fraud-evaluator/fraud-evaluator-fn.construct';
 
 export class AppStack extends cdk.Stack {
   readonly kinesisStream: KinesisStreamConstruct;
@@ -49,10 +53,21 @@ export class AppStack extends cdk.Stack {
     });
 
     const profileAggregatorTable = new ProfileAggregatorTableConstruct(this, 'ProfileAggregatorTable');
+    const fraudRulesTable = new FraudRulesTableConstruct(this, 'FraudRulesTable');
+    const fraudDecisionsTable = new FraudDecisionsTableConstruct(this, 'FraudDecisionsTable');
+    const fraudAlertsTopic = new FraudAlertsTopicConstruct(this, 'FraudAlertsTopic');
 
     new ProfileAggregatorFnConstruct(this, 'ProfileAggregatorFn', {
       stream: this.kinesisStream.stream,
       profileTable: profileAggregatorTable.table,
+    });
+
+    new FraudEvaluatorFnConstruct(this, 'FraudEvaluatorFn', {
+      stream: this.kinesisStream.stream,
+      profileTable: profileAggregatorTable.table,
+      rulesTable: fraudRulesTable.table,
+      decisionsTable: fraudDecisionsTable.table,
+      alertsTopic: fraudAlertsTopic.topic,
     });
 
     const api = new HttpApiConstruct(this, 'HttpApi', {
@@ -65,5 +80,8 @@ export class AppStack extends cdk.Stack {
     new cdk.CfnOutput(this, 'AuditBucket',   { value: auditTrailBucket.bucket.bucketName,       description: 'S3 Bucket Name for immutable audit trail' });
     new cdk.CfnOutput(this, 'AuditFirehose', { value: auditTrailDelivery.deliveryStream.ref,    description: 'Firehose Delivery Stream Name for audit trail' });
     new cdk.CfnOutput(this, 'ProfileTableName', { value: profileAggregatorTable.table.tableName, description: 'DynamoDB table name for client profile aggregation' });
+    new cdk.CfnOutput(this, 'FraudRulesTableName', { value: fraudRulesTable.table.tableName, description: 'DynamoDB table name for fraud rules' });
+    new cdk.CfnOutput(this, 'FraudDecisionsTableName', { value: fraudDecisionsTable.table.tableName, description: 'DynamoDB table name for fraud decisions' });
+    new cdk.CfnOutput(this, 'FraudAlertsTopicArn', { value: fraudAlertsTopic.topic.topicArn, description: 'SNS topic ARN for fraud alerts' });
   }
 }

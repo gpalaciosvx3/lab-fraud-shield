@@ -42,4 +42,10 @@ export class ErrorDictionary {
     descripcion: 'No se pudo persistir el perfil por concurrencia',
     statusCode:  HttpStatus.CONFLICT,
   };
+
+  static readonly SNS_UNAVAILABLE: InputError = {
+    code:        'APP-007',
+    descripcion: 'Servicio de notificaciones SNS no disponible',
+    statusCode:  HttpStatus.SERVICE_UNAVAILABLE,
+  };
 }

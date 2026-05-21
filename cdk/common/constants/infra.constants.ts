@@ -10,4 +10,7 @@ export class InfraConstants {
   static readonly AUDIT_FIREHOSE_BUFFER_MB      = 5;
   static readonly AUDIT_PARTITION_PREFIX         = 'year=!{timestamp:yyyy}/month=!{timestamp:MM}/day=!{timestamp:dd}/client=!{partitionKeyFromQuery:clientId}/';
   static readonly AUDIT_OBJECT_PATH_PATTERN      = 'year=*/month=*/day=*/client=*/*';
+
+  static readonly RISK_ALERT_CLIENT_ID_CLIENT_A = 'C-001';
+  static readonly RISK_ALERT_CLIENT_ID_CLIENT_B = 'C-002';
 }

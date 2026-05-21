@@ -1,4 +1,4 @@
-import { CustomException } from '../../../common/errors/custom.exception';
+import { CustomException } from '../errors/custom.exception';
 
 export interface ProcessRecordResult {
   sequenceNumber: string;

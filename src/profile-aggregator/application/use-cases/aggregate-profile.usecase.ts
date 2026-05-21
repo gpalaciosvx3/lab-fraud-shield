@@ -1,11 +1,16 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ProfileAggregatorService } from '../../domain/service/profile-aggregator.service';
 import { StreamTransactionRequestDto } from '../dtos/stream-transaction.request.dto';
-import { CustomException, ValidationException } from '../../../common/errors/custom.exception';
+import { ValidationException } from '../../../common/errors/custom.exception';
 import { ErrorDictionary } from '../../../common/errors/error.dictionary';
 import { KinesisMessage } from '../../../common/middleware/types/lambda-event.types';
-import { ProcessRecordResult } from '../types/process-record-result.types';
+import { ProcessRecordResult } from '../../../common/types/process-record-result.types';
 import { ProfileAggregatorConstants } from '../../domain/constants/profile-aggregator.constants';
+import {
+  classifyBatchFailure,
+  executeChunkedBatch,
+  summarizeBatchResults,
+} from '../../../common/helpers/batch-processing.helper';
 
 @Injectable()
 export class AggregateProfileUseCase {
@@ -16,17 +21,16 @@ export class AggregateProfileUseCase {
   async executeBatch(records: KinesisMessage[]): Promise<ProcessRecordResult[]> {
     this.logger.log(`Lote recibido => total: ${records.length}`);
 
-    const results: ProcessRecordResult[] = [];
-    for (const chunk of this.chunk(records, ProfileAggregatorConstants.KINESIS_PROCESS_CHUNK_SIZE)) {
-      const settled = await Promise.allSettled(chunk.map(record => this.executeOne(record)));
-      settled.forEach((outcome, idx) => results.push(this.toResult(chunk[idx], outcome)));
-    }
+    const results = await executeChunkedBatch(
+      records,
+      ProfileAggregatorConstants.KINESIS_PROCESS_CHUNK_SIZE,
+      record => this.executeOne(record),
+      (sequenceNumber, error) => this.classifyFailure(sequenceNumber, error),
+    );
 
-    const success = results.filter(result => !result.retry && !result.error).length;
-    const discarded = results.filter(result => !result.retry && result.error).length;
-    const retryable = results.filter(result => result.retry).length;
+    const summary = summarizeBatchResults(results);
 
-    this.logger.log(`Resultado batch => total: ${results.length} | success: ${success} | discarded: ${discarded} | retryable: ${retryable}`);
+    this.logger.log(`Resultado batch => total: ${summary.total} | success: ${summary.success} | discarded: ${summary.discarded} | retryable: ${summary.retryable}`);
     return results;
   }
 
@@ -42,32 +46,15 @@ export class AggregateProfileUseCase {
     this.logger.log(`Resultado => transactionId: ${result.data.transactionId} perfil actualizado`);
   }
 
-  private toResult(record: KinesisMessage, outcome: PromiseSettledResult<void>): ProcessRecordResult {
-    if (outcome.status === 'fulfilled') {
-      return { sequenceNumber: record.sequenceNumber, retry: false };
-    }
-    return this.classifyFailure(record.sequenceNumber, outcome.reason);
-  }
-
   private classifyFailure(sequenceNumber: string, error: unknown): ProcessRecordResult {
     const reason = error instanceof Error ? error.message : String(error);
     this.logger.warn(`Error al procesar registro => sequenceNumber: ${sequenceNumber} | reason: ${reason}`);
 
     if (error instanceof ValidationException) {
       this.logger.error(`Registro descartado por validación => sequenceNumber: ${sequenceNumber}`);
-      return { sequenceNumber, retry: false, error };
     }
 
-    if (error instanceof CustomException) {
-      return { sequenceNumber, retry: true, error };
-    }
-
-    return { sequenceNumber, retry: true };
+    return classifyBatchFailure(sequenceNumber, error);
   }
 
-  private *chunk<T>(items: T[], size: number): Generator<T[]> {
-    for (let index = 0; index < items.length; index += size) {
-      yield items.slice(index, index + size);
-    }
-  }
 }

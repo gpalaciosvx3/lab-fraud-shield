@@ -1,7 +1,7 @@
 import 'reflect-metadata';
 import { defineFeature, loadFeature } from 'jest-cucumber';
 import { AggregateProfileUseCase } from '../../src/profile-aggregator/application/use-cases/aggregate-profile.usecase';
-import { ProcessRecordResult } from '../../src/profile-aggregator/application/types/process-record-result.types';
+import { ProcessRecordResult } from '../../src/common/types/process-record-result.types';
 import { ProfileAggregatorService } from '../../src/profile-aggregator/domain/service/profile-aggregator.service';
 import { ProfileAggregatorConstants } from '../../src/profile-aggregator/domain/constants/profile-aggregator.constants';
 import { ClientProfileDbRepository } from '../../src/profile-aggregator/domain/repository/client-profile.db.repository';

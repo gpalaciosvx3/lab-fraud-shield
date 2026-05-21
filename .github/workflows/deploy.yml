@@ -1,16 +1,17 @@
-name: LOCAL · LocalStack
+name: Deploy · AWS
 
 on:
   pull_request:
-    branches: [local]
+    branches: [master]
   push:
-    branches: [local]
+    branches: [master]
 
 jobs:
   build:
     if: github.event_name == 'pull_request'
     name: Validación y pruebas
     runs-on: ubuntu-latest
+    environment: deployer
     steps:
       - name: Obtener código fuente
         uses: actions/checkout@v4
@@ -41,7 +42,8 @@ jobs:
       - name: Validar plantilla CDK
         working-directory: cdk
         env:
-          CDK_STAGE: local
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.CDK_DEFAULT_ACCOUNT }}
+          CDK_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
         run: npx cdk synth --quiet
 
       - name: Guardar caché de dependencias
@@ -55,23 +57,9 @@ jobs:
 
   deploy:
     if: github.event_name == 'push'
-    name: Despliegue en LocalStack
+    name: Despliegue en AWS
     runs-on: ubuntu-latest
-    environment: deployer-local
-
-    services:
-      localstack:
-        image: localstack/localstack:latest
-        ports:
-          - 4566:4566
-          - 4510-4559:4510-4559
-          - 443:443
-        env:
-          LOCALSTACK_AUTH_TOKEN: ${{ secrets.LOCALSTACK_AUTH_TOKEN }}
-          DEBUG: 0
-          PERSISTENCE: 0
-        options: -v /var/run/docker.sock:/var/run/docker.sock
-
+    environment: deployer
     steps:
       - name: Obtener código fuente
         uses: actions/checkout@v4
@@ -93,26 +81,33 @@ jobs:
       - name: Instalar dependencias
         run: npm install && cd cdk && npm install
 
-      - name: Instalar CLI de CDK y LocalStack
-        run: |
-          npm install -g aws-cdk aws-cdk-local
-          pip install awscli-local
+      - name: Configurar credenciales AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_DEFAULT_REGION }}
 
-      - name: Esperar disponibilidad de LocalStack
-        run: |
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:4566/_localstack/health | grep '"lambda": "available"' && break
-            sleep 3
-          done
-
-      - name: Bootstrap y despliegue en LocalStack
+      - name: Bootstrap del entorno CDK
         working-directory: cdk
         env:
-          CDK_STAGE: local
-          AWS_ACCESS_KEY_ID: test
-          AWS_SECRET_ACCESS_KEY: test
-          AWS_DEFAULT_REGION: us-east-1
-        run: cdklocal bootstrap && cdklocal deploy --require-approval never
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.CDK_DEFAULT_ACCOUNT }}
+          CDK_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+        run: npx cdk bootstrap aws://${{ secrets.CDK_DEFAULT_ACCOUNT }}/${{ secrets.AWS_DEFAULT_REGION }}
+
+      - name: Desplegar stack en AWS
+        working-directory: cdk
+        env:
+          CDK_DEFAULT_ACCOUNT: ${{ secrets.CDK_DEFAULT_ACCOUNT }}
+          CDK_DEFAULT_REGION: ${{ secrets.AWS_DEFAULT_REGION }}
+          RISK_ALERT_EMAIL_CLIENT_A: ${{ secrets.RISK_ALERT_EMAIL_CLIENT_A }}
+          RISK_ALERT_EMAIL_CLIENT_B: ${{ secrets.RISK_ALERT_EMAIL_CLIENT_B }}
+        run: |
+          test -n "$RISK_ALERT_EMAIL_CLIENT_A"
+          test -n "$RISK_ALERT_EMAIL_CLIENT_B"
+          npx cdk deploy --require-approval never --all \
+            --parameters RiskAlertEmailClientA=$RISK_ALERT_EMAIL_CLIENT_A \
+            --parameters RiskAlertEmailClientB=$RISK_ALERT_EMAIL_CLIENT_B
 
       - name: Guardar caché de dependencias
         if: always() && steps.cache.outputs.cache-hit != 'true'

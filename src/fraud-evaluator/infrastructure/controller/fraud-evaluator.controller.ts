@@ -1,14 +1,14 @@
 import { Injectable } from '@nestjs/common';
-import { AggregateProfileUseCase } from '../../application/use-cases/aggregate-profile.usecase';
 import { HandleExecution } from '../../../common/decorator/handle-execution.decorator';
-import { KinesisMessage } from '../../../common/middleware/types/lambda-event.types';
+import { EvaluateFraudUseCase } from '../../application/use-cases/evaluate-fraud.usecase';
 import { ProcessRecordResult } from '../../../common/types/process-record-result.types';
+import { KinesisMessage } from '../../../common/middleware/types/lambda-event.types';
 
 @Injectable()
-export class ProfileAggregatorController {
-  constructor(private readonly useCase: AggregateProfileUseCase) {}
+export class FraudEvaluatorController {
+  constructor(private readonly useCase: EvaluateFraudUseCase) {}
 
-  @HandleExecution('ProfileAggregator')
+  @HandleExecution('FraudEvaluator')
   async handle(records: KinesisMessage[]): Promise<ProcessRecordResult[]> {
     return this.useCase.executeBatch(records);
   }
