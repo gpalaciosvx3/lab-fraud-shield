@@ -1,12 +1,14 @@
-# {{project-name}}
+# FraudShield
 
-{{project-description}}
+Motor de detección de fraude en tiempo real para sistemas financieros y de seguros. Evalúa transacciones en menos de 200 ms contra reglas de negocio configurables y perfiles de comportamiento histórico del cliente, emitiendo decisiones **APPROVE / REJECT / REVIEW** con notificación inmediata al equipo de riesgo.
 
 ---
 
 ## Índice
 
 - [Arquitectura](#arquitectura)
+  - [Flujo end-to-end](#flujo-end-to-end)
+  - [Recursos AWS](#recursos-aws)
 - [API Reference](#api-reference)
   - [Endpoints](#endpoints)
   - [Códigos de error](#códigos-de-error)
@@ -19,16 +21,43 @@
 
 ## Arquitectura
 
-> Agrega tu diagrama: `docs/architecture.png`
-<!-- ![Arquitectura](./docs/architecture.png) -->
+> Diagrama: `docs/architecture.png`
+![Arquitectura](./docs/architecture.png)
+
+### Flujo end-to-end
+
+Tres consumidores independientes procesan el mismo stream de Kinesis sin interferirse:
+
+```
+Sistemas origen
+        │ HTTPS + API Key
+        ▼
+API Gateway  →  Lambda tx-ingester  →  Kinesis Data Streams (partición por clientId)
+                                              │
+                  ┌───────────────────────────┼───────────────────────┐
+                  ▼                           ▼                       ▼
+     Lambda fraud-evaluator       Lambda profile-aggregator     Kinesis Firehose
+      │  DynamoDB fraud-rules       DynamoDB client-profiles      S3 audit trail
+      │  DynamoDB client-profiles
+      │  DynamoDB fraud-decisions
+      └  SNS fraud-alerts → equipo de riesgo (email)
+```
 
 ### Recursos AWS
 
 | Recurso | Nombre | Descripción |
 |---|---|---|
-| API Gateway REST | `UE1{{PROJECT}}GTW001` | Entry point HTTP con API Key + Usage Plan |
-| Lambda `ping` | `UE1{{PROJECT}}LMB001` | Health check |
-| IAM Role | `UE1{{PROJECT}}ROL001` | Rol de ejecución compartido |
+| API Gateway HTTP | `UE1FRAUDSHIELDGTW001` | Entry point con API Key + throttling |
+| Lambda tx-ingester | `UE1FRAUDSHIELDLMB001` | Valida payload y publica en Kinesis |
+| Lambda fraud-evaluator | `UE1FRAUDSHIELDLMB002` | Evalúa reglas y emite decisión |
+| Lambda profile-aggregator | `UE1FRAUDSHIELDLMB003` | Mantiene perfil estadístico por cliente |
+| Kinesis Data Streams | `UE1FRAUDSHIELDKDS001` | 2 shards · partición por `clientId` · 7 días |
+| DynamoDB fraud-rules | `UE1FRAUDSHIELDDDB001` | Reglas configurables por tipo de transacción |
+| DynamoDB client-profiles | `UE1FRAUDSHIELDDDB002` | Perfil estadístico por cliente |
+| DynamoDB fraud-decisions | `UE1FRAUDSHIELDDDB003` | Historial + idempotencia por `transactionId` |
+| SNS fraud-alerts | `UE1FRAUDSHIELDSNS001` | Alertas por email al equipo de riesgo |
+| Kinesis Data Firehose | `UE1FRAUDSHIELDFHS001` | Entrega a S3 (buffer 60 s / 5 MB) |
+| S3 audit trail | `ue1fraudshields3001` | Registro inmutable · partición `year/month/day/clientId` |
 
 ---
 
@@ -38,16 +67,28 @@ Todas las rutas requieren el header `x-api-key`.
 
 ### Endpoints
 
-#### GET `/v1/ping`
+#### POST `/v1/transactions`
 
-Health check del servicio.
+Ingesta una nueva transacción al motor de evaluación.
+
+**Request body:**
+```json
+{
+  "transactionId": "TX-20260521-0001",
+  "clientId": "C-001",
+  "amount": 5800,
+  "region": "US-MIA",
+  "type": "PAYMENT",
+  "timestamp": "2026-05-21T10:00:00.000Z"
+}
+```
 
 **Response `200`:**
 ```json
 {
   "data": {
-    "message": "pong",
-    "timestamp": "2026-04-08T12:00:00.000Z"
+    "transactionId": "TX-20260521-0001",
+    "status": "RECEIVED"
   }
 }
 ```
@@ -66,58 +107,20 @@ Health check del servicio.
 | `APP-002` | 500 | Variable de entorno faltante |
 | `APP-003` | 400 | Body de request inválido |
 
-
 ---
 
 ## Instalación y desarrollo local
 
 ```bash
 # Instalar dependencias
-npm install
+npm install && cd cdk && npm install && cd ..
+
+# Verificación de tipos
+npm run build
 
 # Tests unitarios
 npm test
 ```
-
----
-
-## Desarrollo en LocalStack
-
-> Copiar `.env.example` a `.env` y completar `LOCALSTACK_AUTH_TOKEN`.
-
-```bash
-# Levantar LocalStack
-docker compose up -d
-
-# Instalar CLI (una sola vez)
-npm install -g aws-cdk aws-cdk-local
-pip install awscli-local
-
-# Bootstrap + deploy
-cd cdk
-cdklocal bootstrap
-CDK_STAGE=local cdklocal deploy --require-approval never
-```
-
----
-
-## Despliegue en AWS
-
-```bash
-# Bootstrap (una vez por cuenta/región)
-cdk bootstrap aws://<ACCOUNT_ID>/us-east-1
-
-# Preview de cambios
-CDK_STAGE=dev cdk diff
-
-# Deploy
-CDK_STAGE=dev cdk deploy --require-approval never
-
-# Destruir el stack
-CDK_STAGE=dev cdk destroy
-```
-
-> URL del endpoint: `https://{id}.execute-api.us-east-1.amazonaws.com/{stage}/v1/{path}`
 
 ---
 
@@ -127,19 +130,20 @@ CDK_STAGE=dev cdk destroy
 
 | Archivo | Trigger | Acción |
 |---|---|---|
-| `dev.yml` | `push` a `develop` | Deploy en AWS DEV |
-| `qa.yml` | `push` a `release` | Deploy en AWS QA |
-| `prd.yml` | `push` a `master` | Deploy en AWS PRD |
-| `destroy.yml` | Manual (`workflow_dispatch`) | Destruye el stack del stage seleccionado |
+| `.github/workflows/deploy.yml` | `pull_request` → `master` | Valida tipos, tests y `cdk synth` |
+| `.github/workflows/deploy.yml` | `push` → `master` | Bootstrap + deploy en AWS |
+
+El pipeline de **validación** (PR) garantiza que ningún cambio rompe el build ni los tests antes de fusionarse. El pipeline de **despliegue** (push a `master`) despliega directamente en la cuenta AWS configurada en el environment `deployer`.
 
 ### Secretos requeridos
 
-Configurar en GitHub → Settings → Environments:
+Configurar en GitHub → Settings → Environments → **`deployer`**:
 
-**`deployer-dev` / `deployer-qa` / `deployer-prd`:**
 ```
 AWS_ACCESS_KEY_ID
 AWS_SECRET_ACCESS_KEY
 CDK_DEFAULT_ACCOUNT
 AWS_DEFAULT_REGION
+RISK_ALERT_EMAIL_CLIENT_A
+RISK_ALERT_EMAIL_CLIENT_B
 ```
