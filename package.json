@@ -1,5 +1,5 @@
 {
-  "name": "fraud-shield",
+  "name": "se-fraud-shield",
   "version": "1.0.0",
   "description": "Detector de fraude en tiempo real",
   "scripts": {
