@@ -1,4 +1,4 @@
-# se-fraud-shield — CDK
+# lab-fraud-shield — CDK
 
 Infraestructura AWS del proyecto fraud-shield, definida con AWS CDK (TypeScript) en modo single-account.
 
